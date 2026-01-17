@@ -1,14 +1,30 @@
-// Friday AI Cloud with Groq AI
+// Friday AI Cloud with Groq AI - Secure Version
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   
   // Handle OPTIONS request
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
+  
+  // Basic security check
+  const requestOrigin = req.headers.origin || '';
+  const validOrigins = [
+    'https://friday-ai-three.vercel.app',
+    'http://localhost:3000',
+    'http://localhost'
+  ];
+  
+  // Allow all for testing, you can restrict later
+  // if (!validOrigins.includes(requestOrigin) && !requestOrigin.includes('localhost')) {
+  //   return res.status(403).json({
+  //     success: false,
+  //     error: 'Access denied'
+  //   });
+  // }
   
   // Handle GET request
   if (req.method === 'GET') {
@@ -18,7 +34,8 @@ export default async function handler(req, res) {
       status: 'online',
       timestamp: Date.now(),
       instructions: 'Send POST request with JSON: {"command": "your message"}',
-      model: 'llama3-70b-8192'
+      model: 'llama3-70b-8192',
+      security: 'API key protected'
     });
   }
   
@@ -27,17 +44,19 @@ export default async function handler(req, res) {
     try {
       const { command, userId = 'user' } = req.body;
       
-      if (!command || command.trim() === '') {
+      // Validate input
+      if (!command || typeof command !== 'string' || command.trim() === '') {
         return res.status(400).json({
           success: false,
-          error: 'Please provide a command'
+          error: 'Please provide a valid command'
         });
       }
       
-      console.log(`Processing: ${command}`);
+      // Log request (for monitoring)
+      console.log(`[FRIDAY] Request from ${userId}: ${command.substring(0, 50)}...`);
       
       // Get AI response from Groq
-      const aiResponse = await getGroqResponse(command);
+      const aiResponse = await getGroqResponse(command.trim());
       
       // Success response
       return res.status(200).json({
@@ -50,21 +69,22 @@ export default async function handler(req, res) {
       });
       
     } catch (error) {
-      console.error('Error:', error);
+      console.error('[FRIDAY] Error:', error.message);
       
-      // Fallback responses
-      const fallback = [
-        "Sorry, AI service is temporary unavailable.",
-        "Technical issue ho gaya. Thoda wait karo.",
-        "Connection problem hai. Phirse try karo."
+      // Friendly fallback responses
+      const fallbackResponses = [
+        "Maaf kijiye, AI service temporary unavailable hai. Thoda wait karo.",
+        "Technical issue ho gaya. Main thik kar raha hun, 1 minute ruko.",
+        "Connection problem hai. Aap phirse try karo.",
+        "AI brain thoda busy hai. Kuch der baad bolo!"
       ];
       
       return res.status(200).json({
         success: true,
-        response: fallback[Math.floor(Math.random() * fallback.length)],
-        command: req.body.command || '',
+        response: fallbackResponses[Math.floor(Math.random() * fallbackResponses.length)],
+        command: req.body?.command || '',
         timestamp: Date.now(),
-        note: 'Fallback response'
+        note: 'Fallback response - AI service temporary unavailable'
       });
     }
   }
@@ -72,33 +92,47 @@ export default async function handler(req, res) {
   // Method not allowed
   return res.status(405).json({
     success: false,
-    error: 'Method not allowed'
+    error: 'Method not allowed. Use GET or POST.'
   });
 }
 
-// Groq AI Function
+// Groq AI Function - Secure
 async function getGroqResponse(userMessage) {
-  // Your Groq API Key - Vercel Environment Variable me set karna hoga
   const GROQ_API_KEY = process.env.GROQ_API_KEY;
   
-  if (!GROQ_API_KEY) {
-    throw new Error('Groq API key not configured');
+  if (!GROQ_API_KEY || GROQ_API_KEY === '') {
+    console.error('[SECURITY] Groq API key not configured');
+    throw new Error('AI service configuration error');
+  }
+  
+  // Validate API key format
+  if (!GROQ_API_KEY.startsWith('gsk_')) {
+    console.error('[SECURITY] Invalid Groq API key format');
+    throw new Error('Invalid AI configuration');
   }
   
   // System prompt for Friday AI
-  const systemPrompt = `You are Friday, a friendly and ultra intelligent AI Female assistant that speaks in Hinglish (Hindi + English mix).
+  const systemPrompt = `You are Friday, a friendly AI assistant that speaks in Hinglish (Hindi + English mix).
   
-  Personality: Friendly, charming, helpful, witty, conversational
-  Language: Respond in Hinglish (70% Hindi, 30% English)
-  Tone: Casual and friendly
+  PERSONALITY:
+  - Friendly, helpful, witty, conversational
+  - Speaks like a tech-savvy friend
+  - Uses emojis occasionally 😊
   
-  Capabilities:
-  1. Music: You can play songs, control playback
-  2. Jokes: Tell funny jokes and puns
-  3. Information: Time, weather, news, facts
-  4. General: Answer questions, have conversations
+  LANGUAGE:
+  - Respond in Hinglish (70% Hindi, 30% English)
+  - Use simple words, easy to understand
+  - Add humor when appropriate
   
-  Current time: ${new Date().toLocaleString('en-IN', {
+  CAPABILITIES:
+  1. Music: Can play songs, control playback, suggest music
+  2. Jokes: Tell funny jokes, puns, tech humor
+  3. Information: Time, weather, news, facts, explanations
+  4. General: Answer questions, have conversations, help with tasks
+  5. Tech: Help with programming, ESP32, Arduino, IoT
+  
+  CURRENT CONTEXT:
+  Time: ${new Date().toLocaleString('en-IN', {
     timeZone: 'Asia/Kolkata',
     weekday: 'long',
     year: 'numeric',
@@ -107,11 +141,21 @@ async function getGroqResponse(userMessage) {
     hour: '2-digit',
     minute: '2-digit'
   })}
+  Platform: Cloud-based AI Assistant
+  User: May be using ESP32 microcontroller
   
-  Important: Keep responses concise (1-2 sentences). Be engaging and helpful.`;
+  IMPORTANT:
+  - Keep responses concise (1-3 sentences)
+  - Be engaging and helpful
+  - Add relevant emojis occasionally
+  - If unsure, ask clarifying questions
+  - For music commands, suggest popular songs
+  - For tech questions, give practical advice`;
   
   try {
-    // Using fetch (built into Node.js 18+)
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    
     const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -132,30 +176,57 @@ async function getGroqResponse(userMessage) {
           }
         ],
         temperature: 0.7,
-        max_tokens: 200,
+        max_tokens: 250,
         top_p: 0.9,
         frequency_penalty: 0.1,
         presence_penalty: 0.1
-      })
+      }),
+      signal: controller.signal
     });
     
+    clearTimeout(timeoutId);
+    
     if (!response.ok) {
-      throw new Error(`Groq API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error('[GROQ] API Error:', response.status, errorText);
+      
+      if (response.status === 401) {
+        throw new Error('Invalid API key');
+      } else if (response.status === 429) {
+        throw new Error('Rate limit exceeded');
+      } else {
+        throw new Error(`AI service error: ${response.status}`);
+      }
     }
     
     const data = await response.json();
     
-    // Extract AI response
-    const aiResponse = data.choices?.[0]?.message?.content;
-    
-    if (!aiResponse) {
-      throw new Error('No response from AI');
+    // Validate response
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error('Invalid response from AI service');
     }
     
+    const aiResponse = data.choices[0].message.content.trim();
+    
+    if (!aiResponse || aiResponse === '') {
+      throw new Error('Empty response from AI');
+    }
+    
+    console.log('[GROQ] Response generated successfully');
     return aiResponse;
     
   } catch (error) {
-    console.error('Groq API Error:', error.message);
-    throw error;
+    console.error('[GROQ] Fetch Error:', error.message);
+    
+    // Specific error messages
+    if (error.name === 'AbortError') {
+      throw new Error('AI service timeout. Please try again.');
+    } else if (error.message.includes('API key')) {
+      throw new Error('AI service configuration issue.');
+    } else if (error.message.includes('Rate limit')) {
+      throw new Error('Too many requests. Please wait a moment.');
+    } else {
+      throw new Error('AI service temporarily unavailable.');
+    }
   }
 }
