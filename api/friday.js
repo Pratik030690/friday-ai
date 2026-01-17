@@ -1,4 +1,4 @@
-// REAL GEMINI TEST
+// FIXED GEMINI TEST
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   
@@ -6,41 +6,73 @@ export default async function handler(req, res) {
   
   if (req.method === 'GET') {
     return res.json({
-      status: 'Testing Gemini API',
-      key_exists: !!GEMINI_API_KEY,
-      key_preview: GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 15) + '...' : 'none'
+      status: 'Gemini API Test',
+      available_models: [
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-pro-latest', 
+        'gemini-pro'
+      ],
+      key_exists: !!GEMINI_API_KEY
     });
   }
   
   if (req.method === 'POST') {
     try {
-      // Direct Gemini API call
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{ text: "Hello, tell me a short joke" }]
-            }]
-          })
-        }
-      );
+      // Try different model names
+      const models = [
+        'gemini-1.5-flash-latest',
+        'gemini-1.5-pro-latest',
+        'gemini-pro',
+        'gemini-1.0-pro'
+      ];
       
-      const data = await response.json();
+      let lastError = '';
+      
+      for (const model of models) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
+          
+          const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [{ text: "Hello, tell me a very short joke about technology" }]
+              }],
+              generationConfig: {
+                temperature: 0.7,
+                maxOutputTokens: 100
+              }
+            })
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            return res.json({
+              success: true,
+              working_model: model,
+              response: data.candidates?.[0]?.content?.parts?.[0]?.text || 'No text',
+              full_response: data
+            });
+          }
+          
+          lastError = `Model ${model}: ${response.status}`;
+          
+        } catch (err) {
+          lastError = `Model ${model}: ${err.message}`;
+        }
+      }
       
       return res.json({
-        success: true,
-        gemini_response: data,
-        status_code: response.status
+        success: false,
+        error: 'All models failed',
+        last_error: lastError
       });
       
     } catch (error) {
       return res.json({
         success: false,
-        error: error.message,
-        gemini_key: GEMINI_API_KEY ? 'present' : 'missing'
+        error: error.message
       });
     }
   }
