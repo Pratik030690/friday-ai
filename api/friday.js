@@ -1,85 +1,123 @@
-// LIST GEMINI MODELS
+// FRIDAY AI WITH GEMINI - WORKING VERSION
 export default async function handler(req, res) {
+  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  // Handle OPTIONS
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
   
+  // Handle GET
   if (req.method === 'GET') {
+    return res.status(200).json({
+      success: true,
+      message: '🎀 Friday AI with Google Gemini',
+      status: 'online',
+      model: 'gemini-flash-latest',
+      timestamp: Date.now()
+    });
+  }
+  
+  // Handle POST
+  if (req.method === 'POST') {
     try {
-      // First, list available models
-      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
+      const { command, userId = 'user' } = req.body;
       
-      const listResponse = await fetch(listUrl);
-      const modelsData = await listResponse.json();
+      if (!command || command.trim() === '') {
+        return res.status(400).json({
+          success: false,
+          error: 'Please provide a command'
+        });
+      }
       
-      return res.json({
+      // Get response from Gemini
+      const aiResponse = await getGeminiResponse(command.trim());
+      
+      return res.status(200).json({
         success: true,
-        available_models: modelsData.models?.map(m => m.name) || [],
-        models_count: modelsData.models?.length || 0,
-        key_exists: !!GEMINI_API_KEY
+        response: aiResponse,
+        command: command,
+        userId: userId,
+        timestamp: Date.now(),
+        model: 'gemini-flash-latest'
       });
       
     } catch (error) {
-      return res.json({
-        success: false,
-        error: error.message,
-        key_preview: GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 10) + '...' : 'none'
+      console.error('Error:', error.message);
+      
+      // Fallback
+      return res.status(200).json({
+        success: true,
+        response: "Temporary issue: " + error.message,
+        command: req.body?.command || '',
+        timestamp: Date.now(),
+        note: 'fallback'
       });
     }
   }
   
-  if (req.method === 'POST') {
-    try {
-      // Get available models first
-      const listUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${GEMINI_API_KEY}`;
-      const listResponse = await fetch(listUrl);
-      const modelsData = await listResponse.json();
-      
-      const models = modelsData.models || [];
-      
-      // Try each model
-      for (const model of models.slice(0, 5)) {
-        try {
-          const modelName = model.name.split('/').pop(); // Extract model name
-          const generateUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`;
-          
-          const genResponse = await fetch(generateUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{ text: "Hello, respond with 'OK'" }]
-              }]
-            })
-          });
-          
-          if (genResponse.ok) {
-            const data = await genResponse.json();
-            return res.json({
-              success: true,
-              working_model: modelName,
-              model_display_name: model.displayName,
-              response: data.candidates?.[0]?.content?.parts?.[0]?.text || 'no text',
-              all_models: models.map(m => m.name)
-            });
+  return res.status(405).json({ error: 'Method not allowed' });
+}
+
+// GEMINI AI FUNCTION - WORKING
+async function getGeminiResponse(userMessage) {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  
+  // System prompt
+  const systemPrompt = `You are Friday, a friendly AI assistant that speaks in Hinglish (Hindi + English mix).
+  
+  Respond in Hinglish (70% Hindi, 30% English).
+  Be concise, friendly, and helpful.
+  Add occasional emojis.
+  
+  Current time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
+  
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: systemPrompt }]
+            },
+            {
+              role: "user", 
+              parts: [{ text: userMessage }]
+            }
+          ],
+          generationConfig: {
+            temperature: 0.7,
+            topK: 40,
+            topP: 0.95,
+            maxOutputTokens: 200,
           }
-        } catch (err) {
-          continue; // Try next model
-        }
+        })
       }
-      
-      return res.json({
-        success: false,
-        error: 'No working model found',
-        available_models: models.map(m => m.name),
-        key_preview: GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 15) + '...' : 'none'
-      });
-      
-    } catch (error) {
-      return res.json({
-        success: false,
-        error: error.message
-      });
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Gemini API error: ${response.status}`);
     }
+    
+    const data = await response.json();
+    
+    // Extract response
+    const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!aiResponse) {
+      throw new Error('No response from Gemini');
+    }
+    
+    return aiResponse;
+    
+  } catch (error) {
+    throw new Error('Gemini AI: ' + error.message);
   }
 }
