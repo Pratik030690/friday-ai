@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/friday.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/friday",
+      "dest": "/api/friday.js"
+    },
+    {
+      "src": "/",
+      "dest": "/api/friday.js"
+    }
+  ]
+}
