@@ -1,57 +1,47 @@
-// SIMPLE TEST CODE - Check Environment Variable
+// REAL GEMINI TEST
 export default async function handler(req, res) {
-  // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   
-  // Handle OPTIONS
-  if (req.method === 'OPTIONS') {
-    return res.status(200).end();
-  }
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   
-  // Get Gemini API key from environment
-  const geminiKey = process.env.GEMINI_API_KEY;
-  const hasKey = !!geminiKey;
-  const keyPreview = hasKey ? geminiKey.substring(0, 10) + '...' : 'NO KEY FOUND';
-  
-  // Handle GET request
   if (req.method === 'GET') {
-    return res.status(200).json({
-      success: true,
-      message: '🔧 Debug Mode - Friday AI',
-      gemini_key_exists: hasKey,
-      gemini_key_preview: keyPreview,
-      key_length: hasKey ? geminiKey.length : 0,
-      starts_with_AIza: hasKey ? geminiKey.startsWith('AIza') : false,
-      timestamp: Date.now(),
-      note: 'This is debug mode to check environment variables'
+    return res.json({
+      status: 'Testing Gemini API',
+      key_exists: !!GEMINI_API_KEY,
+      key_preview: GEMINI_API_KEY ? GEMINI_API_KEY.substring(0, 15) + '...' : 'none'
     });
   }
   
-  // Handle POST request
   if (req.method === 'POST') {
     try {
-      const { command } = req.body || {};
+      // Direct Gemini API call
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text: "Hello, tell me a short joke" }]
+            }]
+          })
+        }
+      );
       
-      return res.status(200).json({
+      const data = await response.json();
+      
+      return res.json({
         success: true,
-        response: `Debug: Gemini Key exists? ${hasKey}. Key preview: ${keyPreview}`,
-        command: command || 'no command',
-        gemini_key_status: hasKey ? 'PRESENT' : 'MISSING',
-        timestamp: Date.now(),
-        instructions: 'If key is missing, check Vercel environment variables'
+        gemini_response: data,
+        status_code: response.status
       });
       
     } catch (error) {
-      return res.status(200).json({
+      return res.json({
         success: false,
-        response: `Error: ${error.message}`,
-        gemini_key_exists: hasKey,
-        timestamp: Date.now()
+        error: error.message,
+        gemini_key: GEMINI_API_KEY ? 'present' : 'missing'
       });
     }
   }
-  
-  return res.status(405).json({ error: 'Method not allowed' });
 }
