@@ -1,4 +1,4 @@
-// FRIDAY AI WITH GEMINI - WORKING VERSION
+// FRIDAY AI - USING YOUR WORKING GEMINI CONFIGURATION
 export default async function handler(req, res) {
   // CORS headers
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -14,10 +14,11 @@ export default async function handler(req, res) {
   if (req.method === 'GET') {
     return res.status(200).json({
       success: true,
-      message: '🎀 Friday AI with Google Gemini',
+      message: '🎀 Friday AI - Using Your Gemini Configuration',
       status: 'online',
       model: 'gemini-flash-latest',
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      note: 'Your Gemini API is already working in your Python code'
     });
   }
   
@@ -33,7 +34,9 @@ export default async function handler(req, res) {
         });
       }
       
-      // Get response from Gemini
+      console.log(`[FRIDAY] Processing: ${command.substring(0, 50)}`);
+      
+      // Use EXACTLY same prompt as your working Python code
       const aiResponse = await getGeminiResponse(command.trim());
       
       return res.status(200).json({
@@ -42,54 +45,77 @@ export default async function handler(req, res) {
         command: command,
         userId: userId,
         timestamp: Date.now(),
-        model: 'gemini-flash-latest'
+        model: 'gemini-flash-latest',
+        source: 'Google Gemini AI'
       });
       
     } catch (error) {
-      console.error('Error:', error.message);
+      console.error('[FRIDAY] Error:', error.message);
       
-      // Fallback
+      // Your Python code style fallback
       return res.status(200).json({
         success: true,
-        response: "Temporary issue: " + error.message,
+        response: `Sorry, technical issue aa raha hai. Thodi der baad try karein. (${error.message.substring(0, 50)})`,
         command: req.body?.command || '',
         timestamp: Date.now(),
-        note: 'fallback'
+        note: 'fallback_response'
       });
     }
   }
   
-  return res.status(405).json({ error: 'Method not allowed' });
+  return res.status(405).json({ 
+    success: false,
+    error: 'Method not allowed. Use GET or POST.' 
+  });
 }
 
-// GEMINI AI FUNCTION - WORKING
+// GEMINI FUNCTION - EXACTLY LIKE YOUR PYTHON CODE
 async function getGeminiResponse(userMessage) {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   
-  // System prompt
-  const systemPrompt = `You are Friday, a friendly AI assistant that speaks in Hinglish (Hindi + English mix).
+  if (!GEMINI_API_KEY) {
+    throw new Error('GEMINI_API_KEY not configured in environment variables');
+  }
   
-  Respond in Hinglish (70% Hindi, 30% English).
-  Be concise, friendly, and helpful.
-  Add occasional emojis.
-  
-  Current time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}`;
+  // YOUR EXACT SYSTEM PROMPT FROM PYTHON CODE
+  const systemPrompt = `Hello, I am User, You are a very charming, flirty, accurate and ultra super advanced female AI chatbot named Friday which also has real-time up-to-date information from the internet.
+*** Follow these rules strictly:
+1. Reply in same language as user
+2. If user says "Remember this: <information>", save it to memory.
+3. When asked a question, check memory first before answering.
+4. Do not mention your training data or give unnecessary notes.
+5. Do not talk too much, just answer the question.
+6. Speak in Hinglish (Hindi+English mix) naturally.
+
+Current Date: ${new Date().toLocaleDateString('en-IN')}, Time: ${new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' })}
+
+You are Friday an ultra super intelligent advanced Female AI assistant. Respond in natural Hinglish (Hindi+English mix).
+Be helpful, concise and conversational.
+User's name: User
+
+Keep response short and engaging.`;
   
   try {
+    // Using v1beta API with gemini-flash-latest (your working model)
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${GEMINI_API_KEY}`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
         body: JSON.stringify({
           contents: [
             {
               role: "user",
-              parts: [{ text: systemPrompt }]
-            },
-            {
-              role: "user", 
-              parts: [{ text: userMessage }]
+              parts: [
+                { 
+                  text: systemPrompt + 
+                        `\n\nCurrent user query: ${userMessage}` +
+                        `\n\nResponse (in Hinglish, short and engaging):`
+                }
+              ]
             }
           ],
           generationConfig: {
@@ -97,27 +123,119 @@ async function getGeminiResponse(userMessage) {
             topK: 40,
             topP: 0.95,
             maxOutputTokens: 200,
-          }
+            stopSequences: []
+          },
+          safetySettings: [
+            {
+              category: "HARM_CATEGORY_HARASSMENT",
+              threshold: "BLOCK_NONE"
+            },
+            {
+              category: "HARM_CATEGORY_HATE_SPEECH", 
+              threshold: "BLOCK_NONE"
+            },
+            {
+              category: "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+              threshold: "BLOCK_NONE"
+            },
+            {
+              category: "HARM_CATEGORY_DANGEROUS_CONTENT",
+              threshold: "BLOCK_NONE"
+            }
+          ]
         })
       }
     );
     
+    const responseText = await response.text();
+    
     if (!response.ok) {
-      throw new Error(`Gemini API error: ${response.status}`);
+      console.error('[GEMINI] API Error:', response.status, responseText);
+      throw new Error(`Gemini API error ${response.status}`);
     }
     
-    const data = await response.json();
+    const data = JSON.parse(responseText);
     
-    // Extract response
-    const aiResponse = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    // DEBUG: Log response structure
+    console.log('[GEMINI] Response keys:', Object.keys(data));
     
+    // Multiple ways to extract response (based on Gemini API variations)
+    let aiResponse = '';
+    
+    // Method 1: Standard response
+    if (data.candidates && data.candidates[0]) {
+      const candidate = data.candidates[0];
+      if (candidate.content && candidate.content.parts) {
+        aiResponse = candidate.content.parts[0]?.text || '';
+      } else if (candidate.parts) {
+        aiResponse = candidate.parts[0]?.text || '';
+      }
+    }
+    
+    // Method 2: Direct text extraction
+    if (!aiResponse && data.text) {
+      aiResponse = data.text;
+    }
+    
+    // Method 3: Fallback to string search
     if (!aiResponse) {
-      throw new Error('No response from Gemini');
+      const jsonStr = JSON.stringify(data);
+      const match = jsonStr.match(/"text":"([^"]+)"/);
+      if (match) {
+        aiResponse = match[1];
+      }
     }
     
+    // Clean up response
+    if (aiResponse) {
+      aiResponse = aiResponse
+        .trim()
+        .replace(/\\n/g, '\n')
+        .replace(/^\s*"+|"+\s*$/g, '') // Remove surrounding quotes
+        .replace(/^Friday:\s*/i, '')   // Remove "Friday:" prefix if present
+        .replace(/^Assistant:\s*/i, '') // Remove "Assistant:" prefix
+        .trim();
+    }
+    
+    if (!aiResponse || aiResponse.length < 2) {
+      throw new Error('Empty or invalid response from Gemini');
+    }
+    
+    console.log('[GEMINI] Success:', aiResponse.substring(0, 100) + '...');
     return aiResponse;
     
   } catch (error) {
-    throw new Error('Gemini AI: ' + error.message);
+    console.error('[GEMINI] Fetch Error:', error.message);
+    throw new Error('Gemini service: ' + error.message);
   }
+}
+
+// Add memory storage like your Python code (simplified)
+const memory = [];
+
+function handleMemory(query) {
+  const memoryKeywords = [
+    "remember this:", "remember:", "remember it:", 
+    "yaad rakhna:", "yaad:", "yad rakhna:", "yad:",
+    "yad rakh:", "sun:", "dhyan rakhna:", 
+    "save this:", "note this:", "store this:"
+  ];
+  
+  for (const keyword of memoryKeywords) {
+    if (query.toLowerCase().includes(keyword)) {
+      try {
+        const info = query.toLowerCase().split(keyword)[1].trim();
+        if (info) {
+          memory.push({
+            info: info,
+            timestamp: new Date().toISOString()
+          });
+          return `I've memorized: '${info}'`;
+        }
+      } catch (e) {
+        // Continue to next keyword
+      }
+    }
+  }
+  return null;
 }
